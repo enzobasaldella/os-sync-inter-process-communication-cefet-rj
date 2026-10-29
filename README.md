@@ -1,43 +1,87 @@
-## Process Synchronization & IPC
+# Process Synchronization and Inter-Process Communication
 
-Academic project developed for the Operating Systems course.
+A C program demonstrating process synchronization and inter-process communication (IPC) on Linux. Developed for an Operating Systems course, it coordinates a parent process and four child processes using POSIX shared memory, named semaphores, and a System V message queue.
 
-This project demonstrates Inter-Process Communication (IPC) and synchronization mechanisms in a Linux environment using C. It orchestrates a parent process and multiple child processes interacting through Shared Memory, Semaphores, and Message Queues.
+> [!NOTE]
+> Each child increments the same shared counter exactly once. Semaphore protection ensures that the final value is `4`, although the order in which children execute and report completion is not deterministic.
 
-# Features
+## Features
 
-- **POSIX Shared Memory:** Shared state management between processes.
+- Four child processes created with `fork()`
+- POSIX shared memory for a counter accessible to all processes
+- A start semaphore that keeps children waiting until the parent releases them
+- A binary semaphore for mutual exclusion during counter updates
+- System V messages carrying each child's PID and observed counter value
+- Process termination handling with `wait()` and removal of IPC resources on normal completion
 
-- **POSIX Semaphores:**
-  1. Signaling: Parent process controls the start execution of children.
-  2. Mutex: Binary semaphore ensures atomic access to shared memory.
+## IPC mechanisms
 
-- **System V Message Queues:** Communication channel for children to report status back to the parent.
+| Mechanism | Main functions | Purpose |
+| --- | --- | --- |
+| Shared memory | `shm_open()`, `ftruncate()`, `mmap()` | Store the counter across processes |
+| Named semaphores | `sem_open()`, `sem_wait()`, `sem_post()` | Coordinate startup and protect the critical section |
+| Message queue | `ftok()`, `msgget()`, `msgsnd()`, `msgrcv()` | Deliver completion messages to the parent |
+| Process management | `fork()`, `wait()` | Create child processes and wait for their termination |
 
-- **Process Management:** Usage of fork() and wait() for lifecycle control.
+## Execution flow
 
-# How to Compile and Run
+1. The parent creates and maps shared memory, initializes the counter to zero, and opens two named semaphores.
+2. It creates a System V message queue and forks four children.
+3. Each child blocks on the start semaphore.
+4. After a short delay, the parent calls `sem_post()` four times, releasing the children.
+5. Each child locks the mutex semaphore, increments the shared counter, records its value, and unlocks the semaphore.
+6. Each child sends a completion message containing its PID and counter value.
+7. The parent receives four messages, waits for the children to exit, prints the final counter, and removes the IPC resources.
 
-Compile the source code using Make:
+## Requirements
 
-`make`
+- Linux with POSIX shared memory, POSIX semaphores, and System V IPC support
+- GCC
+- GNU Make
 
-Run the executable:
+## Build and run
 
-`./ipc_sync`
+From the repository root:
 
-# Execution Flow
+```bash
+make
+./ipc_sync
+```
 
-1 - Parent initializes Shared Memory, Semaphores, and Message Queue.
+Alternatively, compile and execute in one step:
 
-2 - Parent spawns 4 child processes.
+```bash
+make run
+```
 
-3 - Children wait on a semaphore (sem_wait) for a broadcast signal.
+A successful run prints one increment message per child, four completion messages received by the parent, and:
 
-4 - Parent signals children to start (sem_post).
+```text
+Final Counter Value in Shared Memory: 4
+```
 
-5 - Children increment a shared counter protected by a mutex.
+The order of the child messages can change between executions.
 
-6 - Children send a completion message via Message Queue.
+Remove the generated executable and object file with:
 
-7 - Parent receives messages, waits for termination, and performs cleanup.
+```bash
+make clean
+```
+
+> [!IMPORTANT]
+> The program removes its named shared memory, named semaphores, and System V message queue during normal shutdown. If it is interrupted before cleanup, IPC objects may remain on the system and require manual removal.
+
+## Project structure
+
+```text
+.
+├── main.c       # Process creation, synchronization, messaging, and cleanup
+├── Makefile     # Build, run, and clean targets
+└── README.md    # Project documentation
+```
+
+## Scope and limitations
+
+- All processes run on one Linux machine; the project demonstrates local IPC rather than communication over a network.
+- The number of children is fixed at four in `N_CHILDS`.
+- The project is an educational example, not a fault-tolerant IPC service. Some system-call and semaphore-operation failures are not fully recovered.
